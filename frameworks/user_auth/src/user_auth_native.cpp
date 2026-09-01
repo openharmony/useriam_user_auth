@@ -14,11 +14,13 @@
  */
 
 #include "user_auth_native.h"
+#include <charconv>
 #include <cinttypes>
 #include <if_system_ability_manager.h>
 #include <iservice_registry.h>
-#include <sstream>
+#include <string>
 #include <system_ability_definition.h>
+#include <system_error>
 #ifdef SUPPORT_SURFACE
 #include "face_auth_innerkit.h"
 #include "surface.h"
@@ -142,12 +144,32 @@ void UserAuthNative::GetProperty(const int32_t userId, const GetPropertyRequest 
 }
 
 #ifdef SUPPORT_SURFACE
+namespace {
+bool ParseSurfaceId(const std::string &text, uint64_t &out)
+{
+    if (text.empty()) {
+        return false;
+    }
+    uint64_t value = 0;
+    const char *first = text.data();
+    const char *last = first + text.size();
+    auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc() || ptr != last) {
+        return false;
+    }
+    out = value;
+    return true;
+}
+}
+
 int32_t UserAuthNative::SetSurfaceId(const SetPropertyRequest &request)
 {
     std::string surfaceIdString(request.setInfo.begin(), request.setInfo.end());
-    std::istringstream surfaceIdStream(surfaceIdString);
     uint64_t surfaceId = 0;
-    surfaceIdStream >> surfaceId;
+    if (!ParseSurfaceId(surfaceIdString, surfaceId)) {
+        USERAUTH_HILOGE(MODULE_JS_NAPI, "SetSurfaceId invalid surface id");
+        return GENERAL_ERROR;
+    }
     USERAUTH_HILOGI(MODULE_JS_NAPI, "SetSurfaceId string %{public}s converted int %{public}" PRIu64,
         surfaceIdString.c_str(), surfaceId);
     if (surfaceId == 0) {
